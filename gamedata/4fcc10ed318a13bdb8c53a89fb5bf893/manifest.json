@@ -1,0 +1,6 @@
+{
+    "mapfile" : "map.bin",
+    "hijackeddata" : {
+        "3c59ae1c3ecd60ccc9380bb503bd6d14" : "data/game.bin"
+    }
+}
