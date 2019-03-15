@@ -100,17 +100,22 @@ func main() {
 	rscs := make(map[string]*ResourceManifest)
 
 	filepath.Walk(*rscpath, func(path string, info os.FileInfo, err error) error {
-		if !info.IsDir() && (info.Name() == "game-manifest.json") {
-			// try to parse it as resource manifest file
-			if b, err := ioutil.ReadFile(path); err == nil {
-				var tmpManifest ResourceManifest
-				if err := json.Unmarshal(b, &tmpManifest); err == nil {
-					// success
-					rscs[filepath.Dir(path)] = &tmpManifest
+		if err == nil {
+			if !info.IsDir() && (info.Name() == "game-manifest.json") {
+				// try to parse it as resource manifest file
+				if b, err := ioutil.ReadFile(path); err == nil {
+					var tmpManifest ResourceManifest
+					if err := json.Unmarshal(b, &tmpManifest); err == nil {
+						// success
+						rscs[filepath.Dir(path)] = &tmpManifest
+					}
 				}
 			}
+			return nil
+		} else {
+			log.Printf("error walking directory: %v", err)
+			return err
 		}
-		return nil
 	})
 
 	proxy := goproxy.NewProxyHttpServer()
