@@ -73,19 +73,21 @@ func BuildMITMProxyHandler(rscs map[string]*ResourceManifest, proxy *goproxy.Pro
 		}
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		bURL := []byte(r.URL.Path)
-		if uuid := mapMatch.FindSubmatch(bURL); uuid != nil {
-			if val, ok := mapbins[string(uuid[1])]; ok {
-				log.Printf("intercepted map.bin for uuid %q\n", uuid[1])
-				http.ServeFile(w, r, val)
-				return
+		if r.Method == http.MethodGet {
+			bURL := []byte(r.URL.Path)
+			if uuid := mapMatch.FindSubmatch(bURL); uuid != nil {
+				if val, ok := mapbins[string(uuid[1])]; ok {
+					log.Printf("intercepted map.bin for uuid %q\n", uuid[1])
+					http.ServeFile(w, r, val)
+					return
+				}
 			}
-		}
-		if md5 := rscMatch.FindSubmatch(bURL); md5 != nil {
-			if val, ok := gamersc[string(md5[1])]; ok {
-				log.Printf("intercepted game resource with MD5 %q\n", md5[1])
-				http.ServeFile(w, r, val)
-				return
+			if md5 := rscMatch.FindSubmatch(bURL); md5 != nil {
+				if val, ok := gamersc[string(md5[1])]; ok {
+					log.Printf("intercepted game resource with MD5 %q\n", md5[1])
+					http.ServeFile(w, r, val)
+					return
+				}
 			}
 		}
 		proxy.ServeHTTP(w, r)
