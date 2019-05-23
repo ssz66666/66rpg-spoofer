@@ -160,8 +160,8 @@ def main():
             dump_map_bin(manifest, args.output_mapbin)
         if args.output_mitm is not None and args.uuid is not None:
             generate_mitm_manifest(manifest, args.uuid, args.output_mitm)
-        if hasattr(args, 'download_path') and args.uuid is not None and args.ver is not None:
-            if args.download_path is None:
+        if hasattr(args, 'download_path'):
+            if args.download_path is None and args.uuid is not None and args.ver is not None:
                 args.download_path = 'game-rsc_%s_%s' % (args.uuid, args.ver)
             download_from_manifest(manifest, pathlib.Path(args.download_path))
     else:
