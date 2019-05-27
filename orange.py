@@ -123,17 +123,19 @@ def main():
     ver_grp.add_argument('ver', nargs='?', default=None, action='append', help='game version, not required for sideloading local project')
     ver_grp.add_argument('--ver', '-ver', dest='ver', action='append', help='game version, not required for sideloading local project')
     manifest_parser.add_argument('--quality', nargs='?', dest='quality', default='32', help='game graphics quality, default to 32(HD)')
-    input_grp.add_argument('--load-json', nargs=1, dest='input_json',
+    input_grp.add_argument('--load-json', dest='input_json',
         type=argparse.FileType(mode='r'),
         help='path to an existing manifest json file, cannot coexist with --uuid')
-    manifest_parser.add_argument('--local-path', nargs=1, dest='local_root',
+    manifest_parser.add_argument('--local-path', dest='local_root',
         help='path to local project directory, should be used with option --uuid, ignored if --load-json is supplied')
     manifest_parser.add_argument('--dump-json', nargs='?', dest='output_json',
         type=argparse.FileType(mode='w'), default=argparse.SUPPRESS,
         help='path to dump the manifest in json format, default to stdout')
-    manifest_parser.add_argument('--dump-binary-map', nargs=1, dest='output_mapbin',
+    manifest_parser.add_argument('--dump-api-response', dest='output_api_response',
+        help='path to manifest.json for web/electron edition')
+    manifest_parser.add_argument('--dump-binary-map', dest='output_mapbin',
         help='path to map.bin for mobile platform sideloading, used by MITM sideloader')
-    manifest_parser.add_argument('--dump-mitm-manifest', nargs=1, dest='output_mitm',
+    manifest_parser.add_argument('--dump-mitm-manifest', dest='output_mitm',
         help='filename of game resource manifest json file used by MITM sideloader. Note that the path to \"map.bin\" is hardcoded. You can edit it manually.')
     manifest_parser.add_argument('--download', nargs='?', dest='download_path',
         default=argparse.SUPPRESS, help='download game resource with the given manifest, path default to \"game-rsc_uuid_ver\" in current working directory')
@@ -156,6 +158,8 @@ def main():
             if args.output_json is None:
                 args.output_json = sys.stdout
             json.dump(manifest, args.output_json)
+        if args.output_api_response is not None:
+            dump_manifest(manifest, args.output_api_response)
         if args.output_mapbin is not None:
             dump_map_bin(manifest, args.output_mapbin)
         if args.output_mitm is not None and args.uuid is not None:
