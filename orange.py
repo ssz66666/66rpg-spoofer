@@ -11,6 +11,8 @@ import concurrent.futures
 import hashlib
 import struct
 import argparse
+import datetime as dt
+import re
 
 def md5_checksum_hex(fname):
     hash_md5 = hashlib.md5()
@@ -26,6 +28,13 @@ def generate_manifest(root):
     for dir in folders:
         for rt, _, files in os.walk(rootpath / dir):
             for f in files:
+                if (dir == "data") and bool(re.match('story', f, re.I)):
+                    continue
+                # ignore apple double files
+                if f.startswith("._"):
+                    continue
+                if bool(re.match('.ds_store', f, re.I)):
+                    continue
                 fpath = pathlib.Path(rt, f)
                 items.append([str(pathlib.PurePosixPath(fpath.relative_to(rootpath))), os.path.getsize(fpath), md5_checksum_hex(fpath)])
     return items
@@ -106,7 +115,55 @@ def generate_mitm_manifest(data, uuid, filename='game-manifest.json'):
     out["hijackeddata"] = hijacked
     with open(filename,'w') as f:
         json.dump(out, f)
-    
+
+def make_android_metadata(meta):
+    # make game.in
+
+    # TODO: generate metadata upon needs
+    pass
+
+def make_android_res(data, localdir, outdir):
+    # make game.oge and corresponding map.oge
+
+    # pattern for map.oge
+    # signature and version
+    args = [b"ORGRES\x05\x00\x00\x00"]
+    pat = "<10s"
+
+    # number of files
+    args.append(len(data))
+    pat += "I"
+
+    offset = 0x6
+    for game_file in data:
+        # file name
+        pat = append_packed_str(pat, args, game_file[0])
+        # md5 hash
+        pat = append_packed_str(pat, args, game_file[2])
+        # size
+        item_size = game_file[1]
+        args.append(item_size)
+        pat += "I"
+        # offset
+        args.append(offset)
+        pat += "I"
+        offset += item_size
+    map_b = struct.pack(pat, *args)
+
+    with open(pathlib.Path(outdir, "map.oge"),'wb') as out:
+        out.write(map_b)
+
+    with open(pathlib.Path(outdir, "game.oge"),'wb') as wfd:
+        # write signature
+        wfd.write(b"ORGMUL")
+        wfd.flush()
+        for item in data:
+            with open(pathlib.Path(localdir, item[0]),'rb') as fd:
+                shutil.copyfileobj(fd, wfd)
+
+def pack_android(data, meta, localdir, outdir):
+    pass
+
 def main():
     parser = argparse.ArgumentParser(description='A simple utility to scrape 66rpg games')
     subparsers = parser.add_subparsers()
@@ -139,6 +196,8 @@ def main():
         help='filename of game resource manifest json file used by MITM sideloader. Note that the path to \"map.bin\" is hardcoded. You can edit it manually.')
     manifest_parser.add_argument('--download', nargs='?', dest='download_path',
         default=argparse.SUPPRESS, help='download game resource with the given manifest, path default to \"game-rsc_uuid_ver\" in current working directory')
+    manifest_parser.add_argument('--pack-android-resource', dest='output_android',
+        help='path to output the packed android game resource, must be used with --local-path')
 
     args = parser.parse_args()
     if hasattr(args, 'game_id'):
@@ -168,6 +227,9 @@ def main():
             if args.download_path is None and args.uuid is not None and args.ver is not None:
                 args.download_path = 'game-rsc_%s_%s' % (args.uuid, args.ver)
             download_from_manifest(manifest, pathlib.Path(args.download_path))
+        if args.output_android is not None and args.local_root is not None:
+            os.makedirs(args.output_android, exist_ok=True)
+            make_android_res(manifest, args.local_root, args.output_android)
     else:
         parser.print_help(sys.stderr)
         sys.exit(0)
