@@ -164,6 +164,16 @@ def make_android_res(data, localdir, outdir):
 def pack_android(data, meta, localdir, outdir):
     pass
 
+def pack_sideloader(data, uuid, localdir, outdir):
+    dump_map_bin(data, filename=pathlib.Path(outdir, "map.bin"))
+    generate_mitm_manifest(data, uuid, filename=pathlib.Path(outdir, "game-manifest.json"))
+    # copy over resource files
+    for item in data:
+        src_path = pathlib.Path(localdir, item[0])
+        dest_path = pathlib.Path(outdir, item[0])
+        os.makedirs(dest_path.parent, exist_ok=True)
+        shutil.copyfile(src_path, dest_path)
+
 def main():
     parser = argparse.ArgumentParser(description='A simple utility to scrape 66rpg games')
     subparsers = parser.add_subparsers()
@@ -198,6 +208,8 @@ def main():
         default=argparse.SUPPRESS, help='download game resource with the given manifest, path default to \"game-rsc_uuid_ver\" in current working directory')
     manifest_parser.add_argument('--pack-android-resource', dest='output_android',
         help='path to output the packed android game resource, must be used with --local-path')
+    manifest_parser.add_argument('--pack-sideloader', dest='output_sideloader',
+        help='path to output the packed game resource and manifest for use with MITM sideloader, must be used with --local-path. A valid uuid is required')
 
     args = parser.parse_args()
     if hasattr(args, 'game_id'):
@@ -230,6 +242,8 @@ def main():
         if args.output_android is not None and args.local_root is not None:
             os.makedirs(args.output_android, exist_ok=True)
             make_android_res(manifest, args.local_root, args.output_android)
+        if args.output_sideloader is not None and args.local_root is not None:
+            pack_sideloader(manifest, args.uuid, args.local_root, args.output_sideloader)
     else:
         parser.print_help(sys.stderr)
         sys.exit(0)
