@@ -13,6 +13,7 @@ import struct
 import argparse
 import datetime as dt
 import re
+import warnings
 
 def md5_checksum_hex(fname):
     hash_md5 = hashlib.md5()
@@ -85,6 +86,17 @@ def append_packed_str(pat, args, input_str):
     args.append(len(b))
     args.append(b)
     return pat + "I" + str(len(b)) + "s"
+
+def read_int32(fd):
+    buf = fd.read(4)
+    return struct.unpack("<I", buf)[0]
+
+def read_packed_str(fd):
+    slen = read_int32(fd)
+    buf = fd.read(slen)
+    if len(buf) != slen:
+        raise ValueError("ill-formed packed string")
+    return buf.decode() # utf-8 encoded string
 
 def dump_map_bin(data, filename="map.bin"):
     item_count = len(data)
@@ -161,6 +173,67 @@ def make_android_res(data, localdir, outdir):
             with open(pathlib.Path(localdir, item[0]),'rb') as fd:
                 shutil.copyfileobj(fd, wfd)
 
+def unpack_android_res(indir, outdir, check_md5=True):
+    # unpack resource from game.oge + map.oge
+    itemlst = []
+    with open(pathlib.Path(indir, "map.oge"), "rb") as mapfd:
+        buf = mapfd.read(6)
+        if buf != b"ORGRES":
+            raise ValueError("bad map.oge signature")
+        vernum = read_int32(mapfd)
+        if vernum != 5:
+            raise ValueError(f"unrecognised version number: {vernum}")
+        nitems = read_int32(mapfd)
+        while True:
+            buf = mapfd.read(4)
+            if not buf:
+                break
+            slen = struct.unpack("<I", buf)[0]
+            buf = mapfd.read(slen)
+            if len(buf) != slen:
+                raise ValueError("ill-formed packed string")
+            fname = buf.decode()
+            md5_checksum = read_packed_str(mapfd)
+            fsize = read_int32(mapfd)
+            foffset = read_int32(mapfd)
+            itemlst.append([fname, md5_checksum, fsize, foffset])
+        if nitems != len(itemlst):
+            warnings.warn("number of resource items mismatch, possibly corrupted files")
+
+    # copied from https://github.com/python/cpython/blob/5faff977adbe089e1f91a5916ccb2160a22dd292/Lib/shutil.py#L52
+    COPY_BUFSIZE = 1024 * 1024 if os.name == 'nt' else 64 * 1024
+
+    with open(pathlib.Path(indir, "game.oge"), "rb") as datafd:
+        for item in itemlst:
+            if check_md5:
+                hash_md5 = hashlib.md5()
+            
+            fpath = pathlib.Path(outdir, item[0])
+            os.makedirs(fpath.parent, exist_ok=True)
+            with open(fpath, "wb") as wfd:
+                fmd5 = item[1]
+                flen = item[2]
+                foffset = item[3]
+                datafd.seek(foffset, 0)
+                nblks, rem = divmod(flen, COPY_BUFSIZE)
+                for _ in range(nblks):
+                    buf = datafd.read(COPY_BUFSIZE)
+                    if len(buf) < COPY_BUFSIZE:
+                        raise IOError("unexpected EOF")
+                    if check_md5:
+                        hash_md5.update(buf)
+                    wfd.write(buf)
+                if rem > 0:
+                    buf = datafd.read(rem)
+                    if len(buf) < rem:
+                        raise IOError("unexpected EOF")
+                    if check_md5:
+                        hash_md5.update(buf)
+                    wfd.write(buf)
+                if check_md5:
+                    if hash_md5.hexdigest() != fmd5:
+                        warnings.warn(f"file {item[0]} MD5 checksum mismatch")
+
 def pack_android(data, meta, localdir, outdir):
     pass
 
@@ -210,6 +283,8 @@ def main():
         help='path to output the packed android game resource, must be used with --local-path')
     manifest_parser.add_argument('--pack-sideloader', dest='output_sideloader',
         help='path to output the packed game resource and manifest for use with MITM sideloader, must be used with --local-path. A valid uuid is required')
+    manifest_parser.add_argument('--unpack-android-resource', dest='output_unpacked',
+        help='path to output the unpacked android game resource, must be used with --local-path pointing to the directory containing both map.oge and game.oge')
 
     args = parser.parse_args()
     if hasattr(args, 'game_id'):
@@ -244,6 +319,8 @@ def main():
             make_android_res(manifest, args.local_root, args.output_android)
         if args.output_sideloader is not None and args.local_root is not None:
             pack_sideloader(manifest, args.uuid, args.local_root, args.output_sideloader)
+        if args.output_unpacked is not None and args.local_root is not None:
+            unpack_android_res(args.local_root, args.output_unpacked)
     else:
         parser.print_help(sys.stderr)
         sys.exit(0)
